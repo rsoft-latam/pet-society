@@ -21,7 +21,10 @@ test.describe("Home Page", () => {
     await page.click("text=MyDoggos");
 
     await expect(page).toHaveURL("/my-dogs");
-    await expect(page.locator("h1")).toBeVisible();
+    // Page shows either h1 "My Doggos" or h2 "No dogs registered yet"
+    const title = page.locator("h1:has-text('My Doggos')");
+    const emptyTitle = page.locator("h2:has-text('No dogs registered yet')");
+    await expect(title.or(emptyTitle)).toBeVisible();
   });
 });
 

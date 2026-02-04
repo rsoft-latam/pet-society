@@ -1,0 +1,150 @@
+# =============================================================================
+# Sentinel Auto-Fix - Se activa cuando CI falla
+# =============================================================================
+# Copia este archivo a: pet-society/.github/workflows/sentinel-auto-fix.yml
+#
+# SECRETS REQUERIDOS (configura en Settings > Secrets > Actions):
+# - SENTINEL_URL: URL donde está corriendo Sentinel (ej: https://tu-sentinel.com)
+# - OPENAI_API_KEY: Tu API key de OpenAI
+# - SENTINEL_GITHUB_TOKEN: GitHub token con permisos de repo
+# - SLACK_BOT_TOKEN: Token de Slack (opcional)
+# - SLACK_CHANNEL_ID: ID del canal de Slack (opcional)
+# =============================================================================
+
+name: Sentinel Auto-Fix
+
+on:
+  # Se activa cuando el workflow "CI" termina
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+  # También se puede activar manualmente
+  workflow_dispatch:
+    inputs:
+      error_message:
+        description: 'Mensaje de error a analizar'
+        required: true
+        type: string
+
+jobs:
+  auto-fix:
+    name: Analyze & Fix
+    # Solo corre si CI falló O si se activa manualmente
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Failed Logs
+        if: github.event_name == 'workflow_run'
+        id: logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "📋 Extrayendo logs del workflow fallido..."
+
+          RUN_ID=${{ github.event.workflow_run.id }}
+
+          # Obtener logs de jobs fallidos
+          gh run view $RUN_ID --log-failed 2>&1 | tail -80 > error.txt || true
+
+          # Si no hay logs fallidos, buscar errores en logs generales
+          if [ ! -s error.txt ]; then
+            gh run view $RUN_ID --log 2>&1 | grep -i -B2 -A5 "error\|failed\|Error:" | head -60 > error.txt || true
+          fi
+
+          # Preparar para JSON
+          ERROR=$(cat error.txt | tr '\n' ' ' | sed 's/"/\\"/g' | cut -c1-1500)
+          echo "error=$ERROR" >> $GITHUB_OUTPUT
+
+          echo "📄 Error extraído:"
+          cat error.txt | head -20
+
+      - name: Call Sentinel
+        id: sentinel
+        run: |
+          echo "🤖 Llamando a Sentinel..."
+
+          # Determinar mensaje de error
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ERROR_MSG="${{ github.event.inputs.error_message }}"
+          else
+            ERROR_MSG="${{ steps.logs.outputs.error }}"
+          fi
+
+          # Verificar que tenemos un error
+          if [ -z "$ERROR_MSG" ]; then
+            echo "⚠️ No se encontraron errores para analizar"
+            exit 0
+          fi
+
+          # Llamar a Sentinel API
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.SENTINEL_URL }}/analyze-ci-error" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"repo_url\": \"https://github.com/${{ github.repository }}\",
+              \"error_logs\": \"$ERROR_MSG\",
+              \"branch\": \"${{ github.event.workflow_run.head_branch || 'main' }}\",
+              \"max_fix_attempts\": 2
+            }" || echo -e "\n500")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "📡 HTTP Status: $HTTP_CODE"
+          echo "📦 Response: $BODY"
+
+          # Extraer PR URL
+          PR_URL=$(echo "$BODY" | jq -r '.pr_url // empty' 2>/dev/null || echo "")
+          STATUS=$(echo "$BODY" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+          if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+            echo "✅ Sentinel creó un PR: $PR_URL"
+          else
+            echo "⚠️ Sentinel no pudo crear un PR automático"
+          fi
+
+      - name: Comment on PR
+        if: github.event.workflow_run.pull_requests[0]
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUM=${{ github.event.workflow_run.pull_requests[0].number }}
+          FIX_PR="${{ steps.sentinel.outputs.pr_url }}"
+          STATUS="${{ steps.sentinel.outputs.status }}"
+
+          if [ -n "$FIX_PR" ] && [ "$FIX_PR" != "null" ]; then
+            gh pr comment $PR_NUM --body "## 🤖 Sentinel Auto-Fix
+
+          El CI falló, pero Sentinel ha creado un fix automático:
+
+          **➡️ [Ver Pull Request con el Fix]($FIX_PR)**
+
+          Por favor revisa el fix propuesto y haz merge si es correcto."
+          else
+            gh pr comment $PR_NUM --body "## 🤖 Sentinel Auto-Fix
+
+          El CI falló. Sentinel analizó el error pero no pudo crear un fix automático.
+
+          **Estado:** $STATUS
+
+          Revisa los [logs del workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) para más detalles."
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 🤖 Sentinel Auto-Fix Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ steps.sentinel.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.sentinel.outputs.pr_url }}" ] && [ "${{ steps.sentinel.outputs.pr_url }}" != "null" ]; then
+            echo "**Fix PR:** ${{ steps.sentinel.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -18,7 +18,7 @@ export type DogFormData = z.infer<typeof dogFormSchema>;
 
 // Generate unique tag
 export function generateTag(): string {
-  const prefix = "DOG";
+  const prefix = "CATAAA";
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `${prefix}-${timestamp}-${random}`;

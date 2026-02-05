@@ -20,9 +20,17 @@ on:
 jobs:
   auto-fix:
     name: Analyze & Fix
+    # No ejecutar si:
+    # - La rama viene de Sentinel (sentinel-fix/*, fix/sentinel-*)
+    # - El actor es un bot de Sentinel
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'failure'
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'failure') &&
+      !startsWith(github.event.workflow_run.head_branch || '', 'sentinel-fix/') &&
+      !startsWith(github.event.workflow_run.head_branch || '', 'fix/sentinel-') &&
+      !contains(github.event.workflow_run.head_branch || '', 'auto-fix') &&
+      github.actor != 'sentinel-bot' &&
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:

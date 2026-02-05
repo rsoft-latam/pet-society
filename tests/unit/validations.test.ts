@@ -85,6 +85,6 @@ describe("generateTag", () => {
   // TODO: Fix this test - intentional failure to trigger Sentinel
   it("should start with CAT prefix", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^CATTA-/);
+    expect(tag).toMatch(/^CATA-/);
   });
 });

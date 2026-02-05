@@ -20,25 +20,42 @@ on:
 jobs:
   auto-fix:
     name: Analyze & Fix
-    # No ejecutar si:
-    # - La rama viene de Sentinel (sentinel-fix/*, fix/sentinel-*)
-    # - El actor es un bot de Sentinel
+    # No ejecutar si la rama viene de Sentinel
     if: |
       (github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'failure') &&
-      !startsWith(github.event.workflow_run.head_branch || '', 'sentinel-fix/') &&
-      !startsWith(github.event.workflow_run.head_branch || '', 'fix/sentinel-') &&
-      !contains(github.event.workflow_run.head_branch || '', 'auto-fix') &&
-      github.actor != 'sentinel-bot' &&
-      github.actor != 'github-actions[bot]'
+      github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check if from Sentinel
+        id: check
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          ACTOR="${{ github.actor }}"
+
+          echo "Branch: $BRANCH"
+          echo "Actor: $ACTOR"
+
+          # Verificar si viene de Sentinel
+          if [[ "$BRANCH" == *"sentinel"* ]] || \
+             [[ "$BRANCH" == *"auto-fix"* ]] || \
+             [[ "$BRANCH" == *"autofix"* ]] || \
+             [[ "$BRANCH" == *"fix-ci"* ]] || \
+             [[ "$ACTOR" == *"bot"* ]] || \
+             [[ "$ACTOR" == *"sentinel"* ]]; then
+            echo "⚠️ Skipping - PR comes from Sentinel or bot"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Proceeding - PR is from a human"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout
+        if: steps.check.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       - name: Get Failed Logs
-        if: github.event_name == 'workflow_run'
+        if: steps.check.outputs.skip != 'true' && github.event_name == 'workflow_run'
         id: logs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,6 +77,7 @@ jobs:
           echo "error_file=error_clean.txt" >> $GITHUB_OUTPUT
 
       - name: Call Sentinel
+        if: steps.check.outputs.skip != 'true'
         id: sentinel
         run: |
           echo "🤖 Llamando a Sentinel..."
@@ -134,6 +152,7 @@ jobs:
           fi
 
       - name: Summary
+        if: steps.check.outputs.skip != 'true'
         run: |
           echo "## 🤖 Sentinel Auto-Fix Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

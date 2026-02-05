@@ -9,6 +9,10 @@ export async function createDog(
   imageUrl: string,
   formData: DogFormData
 ): Promise<{ success: boolean; error?: string }> {
+  if (!db) {
+    return { success: false, error: "Database not available" };
+  }
+
   try {
     // Validate form data
     const validatedData = dogFormSchema.parse(formData);
@@ -41,6 +45,10 @@ export async function createDog(
 }
 
 export async function getDogs(): Promise<Dog[]> {
+  if (!db) {
+    return [];
+  }
+
   try {
     const allDogs = await db.select().from(dogs);
     return allDogs;

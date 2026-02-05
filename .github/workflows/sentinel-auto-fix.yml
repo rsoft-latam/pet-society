@@ -58,37 +58,30 @@ jobs:
 
           # Determinar mensaje de error
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            ERROR_MSG="${{ github.event.inputs.error_message }}"
+            echo "${{ github.event.inputs.error_message }}" > /tmp/error_raw.txt
           else
-            ERROR_MSG=$(cat error_clean.txt 2>/dev/null || echo "CI workflow failed")
+            cp error_clean.txt /tmp/error_raw.txt 2>/dev/null || echo "CI workflow failed" > /tmp/error_raw.txt
           fi
 
-          # Si no hay error, usar mensaje genérico
-          if [ -z "$ERROR_MSG" ]; then
-            ERROR_MSG="CI workflow failed - no specific error extracted"
-          fi
-
-          # Crear archivo JSON para evitar problemas de escape
-          cat > /tmp/payload.json << 'EOFPAYLOAD'
-          {
-            "repo_url": "https://github.com/${{ github.repository }}",
-            "error_logs": "PLACEHOLDER_ERROR",
-            "branch": "${{ github.event.workflow_run.head_branch || 'main' }}",
-            "max_fix_attempts": 2
-          }
-          EOFPAYLOAD
-
-          # Reemplazar placeholder con error escapado usando Python
-          python3 << EOFPYTHON
+          # Crear payload JSON usando Python (maneja escape correctamente)
+          python3 << 'EOFPYTHON'
           import json
-          import sys
+          import re
 
-          error_msg = """$ERROR_MSG"""
+          # Leer error desde archivo
+          try:
+              with open('/tmp/error_raw.txt', 'r', encoding='utf-8', errors='ignore') as f:
+                  error_msg = f.read()
+          except:
+              error_msg = "CI workflow failed - could not read error"
 
-          # Limpiar el mensaje
-          error_msg = error_msg.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-          error_msg = ' '.join(error_msg.split())  # Normalizar espacios
-          error_msg = error_msg[:1000]  # Limitar longitud
+          # Limpiar caracteres problemáticos
+          error_msg = re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', error_msg)  # Remove control chars
+          error_msg = ' '.join(error_msg.split())  # Normalize whitespace
+          error_msg = error_msg[:1000]  # Limit length
+
+          if not error_msg.strip():
+              error_msg = "CI workflow failed - no specific error extracted"
 
           payload = {
               "repo_url": "https://github.com/${{ github.repository }}",
@@ -98,9 +91,10 @@ jobs:
           }
 
           with open('/tmp/payload.json', 'w') as f:
-              json.dump(payload, f)
+              json.dump(payload, f, ensure_ascii=True)
 
-          print("Payload created successfully")
+          print("✅ Payload created successfully")
+          print(f"Error length: {len(error_msg)} chars")
           EOFPYTHON
 
           echo "📦 Payload:"

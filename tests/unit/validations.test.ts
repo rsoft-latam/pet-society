@@ -64,9 +64,10 @@ describe("dogFormSchema", () => {
 });
 
 describe("generateTag", () => {
-  it("should generate a tag with DOG prefix", () => {
+  // Test for Sentinel demo - expects CATAAA prefix
+  it("should start with CATAAA prefix", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^DOG-/);
+    expect(tag).toMatch(/^CATAAA-/);
   });
 
   it("should generate unique tags", () => {
@@ -79,12 +80,6 @@ describe("generateTag", () => {
 
   it("should follow the expected format", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^DOG-[A-Z0-9]+-[A-Z0-9]{4}$/);
-  });
-
-  // TODO: Fix this test - intentional failure to trigger Sentinel
-  it("should start with CAT prefix", () => {
-    const tag = generateTag();
-    expect(tag).toMatch(/^CATAAAA-/);
+    expect(tag).toMatch(/^CATAAA-[A-Z0-9]+-[A-Z0-9]{4}$/);
   });
 });

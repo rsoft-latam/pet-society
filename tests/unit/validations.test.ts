@@ -81,4 +81,10 @@ describe("generateTag", () => {
     const tag = generateTag();
     expect(tag).toMatch(/^DOG-[A-Z0-9]+-[A-Z0-9]{4}$/);
   });
+
+  // TODO: Fix this test - intentional failure to trigger Sentinel
+  it("should start with CAT prefix", () => {
+    const tag = generateTag();
+    expect(tag).toMatch(/^CAT-/);
+  });
 });

@@ -67,7 +67,7 @@ describe("generateTag", () => {
   // Test for Sentinel demo - expects CATAAA prefix
   it("should start with CATAAA prefix", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^CATAAA-/);
+    expect(tag).toMatch(/^CATADD-/);
   });
 
   it("should generate unique tags", () => {
@@ -80,6 +80,6 @@ describe("generateTag", () => {
 
   it("should follow the expected format", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^CATAAA-[A-Z0-9]+-[A-Z0-9]{4}$/);
+    expect(tag).toMatch(/^CATADD-[A-Z0-9]+-[A-Z0-9]{4}$/);
   });
 });

@@ -80,6 +80,6 @@ describe("generateTag", () => {
 
   it("should follow the expected format", () => {
     const tag = generateTag();
-    expect(tag).toMatch(/^CATP{4}$/);
+    expect(tag).toMatch(/^CATADD-[A-Z0-9]+-[A-Z0-9]{4}$/);
   });
 });
